@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <title> 默契大挑戰 </title>
+    <style>
+        :root {
+            --primary-pink: #ff80ab;
+            --deep-pink: #c94b7b;
+            --bg-color: #ffeef2;
+        }
+
+        body {
+            font-family: 'Microsoft JhengHei', 'PingFang TC', sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            overflow: hidden; /* 防止捲動，為了煙火效果 */
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* 遊戲主容器 */
+        #game-container {
+            position: relative;
+            width: 90%;
+            max-width: 400px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px 20px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            text-align: center;
+            z-index: 10; /* 確保在煙火上方 */
+        }
+
+        /* 畫面切換控制 */
+        .screen { display: none; }
+        .active { display: block; }
+
+        /* 跳動動畫 (Bounce) */
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+        .bouncing-text {
+            animation: bounce 1s infinite ease-in-out;
+            color: var(--deep-pink);
+            font-size: 2rem;
+            font-weight: bold;
+            text-shadow: 2px 2px 0px #fff;
+        }
+
+        /* 按鈕樣式 */
+        .btn {
+            background-color: var(--primary-pink);
+            color: white;
+            border: none;
+            padding: 15px 0;
+            width: 100%;
+            border-radius: 50px;
+            font-size: 1.2rem;
+            margin-top: 20px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.1s;
+        }
+        .btn:active { transform: scale(0.95); background-color: var(--deep-pink); }
+
+        /* 選項按鈕 */
+        .option-btn {
+            background: white;
+            border: 2px solid var(--primary-pink);
+            color: #333;
+            margin: 15px 0;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        /* 答對答錯提示 */
+        #feedback-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 4rem;
+            font-weight: bold;
+            display: none;
+            z-index: 20;
+            text-shadow: 0 0 10px rgba(255,255,255,0.8);
+        }
+
+        /* 煙火 Canvas */
+        #fireworks-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* 讓點擊可以穿透煙火 */
+            z-index: 1;
+        }
+
+        /* 結尾 GIF 圖片區域 */
+        #gif-container {
+            margin-top: 15px;
+            border-radius: 10px;
+            overflow: hidden;
+            max-width: 150px; /* 圖片最大寬度 */
+            margin-left: auto;
+            margin-right: auto;
+            border: 3px solid var(--primary-pink);
+            background: #eee;
+            min-height: 100px; /* 預留高度 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #gif-img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .final-score { font-size: 3.5rem; color: var(--deep-pink); margin: 10px 0; font-weight: 900;}
+    </style>
+</head>
+<body>
+
+<canvas id="fireworks-canvas"></canvas>
+
+<div id="game-container">
+    
+    <div id="start-screen" class="screen active">
+        <h1 class="bouncing-text">❤️ 默契大挑戰 ❤️</h1>
+        <p>這是一個關於我們的小測驗</p>
+        <p>準備好接受挑戰了嗎？</p>
+        <button class="btn" onclick="startGame()">開始遊戲</button>
+    </div>
+
+    <div id="game-screen" class="screen">
+        <h3 id="question-count">第 1/10 題</h3>
+        <h2 id="question-text" style="min-height: 60px; margin: 20px 0;">題目載入中...</h2>
+        <div id="options-area">
+            </div>
+        <div id="feedback-overlay"></div>
+    </div>
+
+    <div id="end-screen" class="screen">
+        <h1 class="bouncing-text">🎂 生日快樂！ 🎂</h1>
+        <p>你的最終得分：</p>
+        <div class="final-score" id="final-score">0</div>
+        <p>謝謝媽!媽很辛苦! ✨</p>
+        
+        <div id="gif-container">
+            <img id="gif-img" src="1.gif" alt="生日快樂GIF">
+        </div>
+    </div>
+
+</div>
+
+<audio id="sound-correct" src="https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3"></audio>
+<audio id="sound-wrong" src="https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3"></audio>
+
+<audio id="bg-music" src="H.mp3" loop></audio> 
+
+<script>
+    // === 題目設定 (請在此修改題目) ===
+    // 0 代表第一個選項正確，1 代表第二個選項正確
+    const questions = [
+        { q: "媽比較喜歡吃哪一種？", o: ["炸蔴荖", "鳳梨酥"], a: 0 },
+        { q: "媽比較喜歡吃哪一種", o: ["肉多多", "肉桂派"], a: 0 },
+        { q: "媽比較喜歡哪一種影片？", o: ["台客饒舌", "末日喪屍"], a: 1 },
+        { q: "媽比較喜歡哪一種影片？", o: ["極限體能王", "玫瑰之夜"], a: 0 }, // 範例，請自行修改
+        { q: "媽比較喜歡哪一種軟體？", o: ["Dcard", "抖音"], a: 0 }, // 範例
+        { q: "媽覺得誰比較強", o: ["岳老三", "蕭峰"], a: 1 },
+        { q: "媽比較喜歡什麼花？", o: ["蘭花", "有錢花"], a: 1 }, // 範例
+        { q: "媽比較喜歡什麼貴金屬？", o: ["何金塊", "王金條"], a: 1 },
+        { q: "媽較喜歡誰", o: ["吉伊卡哇", "拉不不"], a: 0 },
+        { q: "今天是誰的生日？", o: ["全宇宙最棒的媽", "不知道"], a: 0 }
+    ];
+    let currentIdx = 0;
+    let score = 0;
+    let canClick = true;
+
+    // 音效物件
+    const sndCorrect = document.getElementById('sound-correct');
+    const sndWrong = document.getElementById('sound-wrong');
+    const bgMusic = document.getElementById('bg-music');
+
+    // 1. 開始遊戲
+    function startGame() {
+        showScreen('game-screen');
+        loadQuestion();
+    }
+
+    // 2. 載入題目
+    function loadQuestion() {
+        if (currentIdx >= questions.length) {
+            endGame();
+            return;
+        }
+
+        const qData = questions[currentIdx];
+        document.getElementById('question-count').innerText = `第 ${currentIdx + 1} / 10 題`;
+        document.getElementById('question-text').innerText = qData.q;
+        
+        const optsDiv = document.getElementById('options-area');
+        optsDiv.innerHTML = ""; // 清空
+
+        qData.o.forEach((txt, idx) => {
+            let btn = document.createElement('button');
+            btn.className = "btn option-btn";
+            btn.innerText = txt;
+            btn.onclick = () => checkAnswer(idx);
+            optsDiv.appendChild(btn);
+        });
+        
+        canClick = true;
+    }
+
+    // 3. 檢查答案
+    function checkAnswer(userChoice) {
+        if (!canClick) return;
+        canClick = false; // 防止連點
+
+        const qData = questions[currentIdx];
+        const overlay = document.getElementById('feedback-overlay');
+        
+        overlay.style.display = "block";
+
+        if (userChoice === qData.a) {
+            score += 10;
+            overlay.innerText = "⭕";
+            overlay.style.color = "#4caf50";
+            sndCorrect.currentTime = 0;
+            sndCorrect.play();
+        } else {
+            overlay.innerText = "❌";
+            overlay.style.color = "#f44336";
+            sndWrong.currentTime = 0;
+            sndWrong.play();
+        }
+
+        // 1秒後下一題
+        setTimeout(() => {
+            overlay.style.display = "none";
+            currentIdx++;
+            loadQuestion();
+        }, 1000);
+    }
+
+    // 4. 結束遊戲
+    function endGame() {
+        showScreen('end-screen');
+        document.getElementById('final-score').innerText = score;
+        
+        // 嘗試播放背景音樂 (如果路徑有設定)
+        if(bgMusic.getAttribute('src') !== "") {
+            bgMusic.play().catch(e => console.log("需使用者互動才能播放音樂"));
+        }
+
+        startFireworks(); // 啟動煙火
+    }
+
+    function showScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+    }
+
+    // === 簡易煙火特效程式碼 ===
+    function startFireworks() {
+        const canvas = document.getElementById('fireworks-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let particles = [];
+
+        function Particle(x, y, color) {
+            this.x = x;
+            this.y = y;
+            this.color = color;
+            this.velocity = {
+                x: (Math.random() - 0.5) * 8,
+                y: (Math.random() - 0.5) * 8
+            };
+            this.alpha = 1;
+            this.friction = 0.96;
+        }
+
+        Particle.prototype.draw = function() {
+            ctx.globalAlpha = this.alpha;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 3, 0, Math.PI * 2, false);
+            ctx.fillStyle = this.color;
+            ctx.fill();
+        }
+
+        Particle.prototype.update = function() {
+            this.velocity.x *= this.friction;
+            this.velocity.y *= this.friction;
+            this.x += this.velocity.x;
+            this.y += this.velocity.y + 0.5; // gravity
+            this.alpha -= 0.01;
+            this.draw();
+        }
+
+        function createFirework(x, y) {
+            const colors = ['#ff80ab', '#ff4081', '#f50057', '#ffd740', '#69f0ae'];
+            for (let i = 0; i < 30; i++) {
+                particles.push(new Particle(x, y, colors[Math.floor(Math.random() * colors.length)]));
+            }
+        }
+
+        // 自動施放煙火迴圈
+        setInterval(() => {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * (canvas.height / 2);
+            createFirework(x, y);
+        }, 800);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            ctx.fillStyle = 'rgba(255, 238, 242, 0.2)'; // 拖尾效果
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            particles.forEach((particle, index) => {
+                if (particle.alpha > 0) {
+                    particle.update();
+                } else {
+                    particles.splice(index, 1);
+                }
+            });
+        }
+        animate();
+    }
+</script>
+
+</body>
+</html>
